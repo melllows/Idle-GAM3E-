@@ -1,7 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.Common;
+using Unity.VisualScripting;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
+using UnityEngine.XR;
 
 public class GobboMovement : MonoBehaviour
 {
@@ -16,12 +19,19 @@ public class GobboMovement : MonoBehaviour
         public Vector2 targetPosition;
     }
 
+    public float idleDelay;
+    public float idleTimer = 0f;
+
+
     private Animator animator;
     public ParticleSystem particleSystem;
     private LineRenderer lineRenderer;
 
+    private Coroutine currentMovementCoroutine;
+
     void Start()
     {
+        idleDelay = Random.Range(15f, 30f);
         animator = GetComponent<Animator>();
         particleSystem = GetComponentInChildren<ParticleSystem>();
 
@@ -32,16 +42,52 @@ public class GobboMovement : MonoBehaviour
         lineRenderer.startColor = Color.cyan;
         lineRenderer.endColor = Color.cyan;
         lineRenderer.positionCount = 0;
+
+        Gobblyns gobbo = GetComponent<Gobblyns>();
+    }
+
+    void Update()
+    {
+        Gobblyns gobbo = GetComponent<Gobblyns>();
+        if (!isMoving && !animator.GetBool("isIntrested") && !animator.GetBool("isWorking"))
+        {
+            idleTimer += Time.deltaTime;
+            if (idleTimer >= idleDelay && !animator.GetBool("beenIdle"))
+            {
+                animator.SetBool("beenIdle", true);
+                Debugger.Instance.Log("[GobboMovement] " + name + " has been idle for " + idleDelay + " seconds.");
+            }
+        }
+        else
+        {
+            idleTimer = 0f;
+            if (animator.GetBool("beenIdle"))
+            {
+                animator.SetBool("beenIdle", false);
+                Debugger.Instance.Log("[GobboMovement] " + name + " is no longer idle.");
+            }
+        }
+    }
+
+
+    public void Interruptpath(Vector2 targetPosition)
+    {
+        if(isMoving && currentMovementCoroutine != null)
+        {
+            StopCoroutine(currentMovementCoroutine);
+            currentMovementCoroutine = null;
+            isMoving = false;
+            path.Clear();
+        }
+        MoveTo(targetPosition);
     }
 
     public void MoveTo(Vector2 targetPosition)
     {
         if (isMoving) {
-            Debug.Log("[GobboMovement] " + name + " is already moving. New target: " + targetPosition);
+            Debugger.Instance.Log("[GobboMovement] " + name + " is already moving. New target: " + targetPosition);
             return;
         }
-        
-        if (isMoving) return;
 
         //Debugger.Instance.Log($"[GobboMovement] {name} is moving to {targetPosition}");
 
@@ -77,7 +123,7 @@ public class GobboMovement : MonoBehaviour
         lineRenderer.SetPositions(worldPositions.ToArray());
 
         animator.SetBool("isIntrested", true);
-        StartCoroutine(FollowPath());
+        currentMovementCoroutine = StartCoroutine(FollowPath());
     }
 
 
@@ -87,16 +133,35 @@ public class GobboMovement : MonoBehaviour
         animator.SetBool("isWalking", true);
         particleSystem.Play();
 
+        float rotationSpeed = 1500f;
+
         while (path.Count > 0)
         {
             Vector2 nextPos = path.Dequeue();
             //Debugger.Instance.Log($"Moving to: {nextPos}");
 
+            Quaternion targetRotation;
+
+            if(nextPos.x - transform.position.x < 0)
+            {
+                targetRotation = Quaternion.Euler(0, 180, 0);
+            }
+            else if(nextPos.x - transform.position.x > 0)
+            {
+                targetRotation = Quaternion.Euler(0, 0, 0);
+            }
+            else
+            {
+                targetRotation = transform.rotation;
+            }
+
             while (Vector2.Distance(transform.position, nextPos) > 0.05f)
             {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
                 transform.position = Vector2.MoveTowards(transform.position, nextPos, speed * Time.deltaTime);
                 yield return null;
             }
+                //Vector2 direction = (nextPos - (Vector2)transform.position).normalized;
         }
 
         lineRenderer.positionCount = 0;
@@ -108,10 +173,12 @@ public class GobboMovement : MonoBehaviour
 
         yield return new WaitForSeconds(0.2f);
 
-        if (currentTask != null)
+        if (currentTask == null)
         {
             StartCoroutine(WorkOnTask(3f));
         }
+
+        currentMovementCoroutine = null;
     }
 
     public IEnumerator WorkOnTask(float taskTime)
@@ -125,14 +192,17 @@ public class GobboMovement : MonoBehaviour
     {
         if (currentTask != null && isMoving)
         {
-            StopCoroutine(FollowPath());
-            isMoving = false;
-        }
-
+            if (currentMovementCoroutine != null)
+            {
+                StopCoroutine(currentMovementCoroutine);
+                currentMovementCoroutine = null;
+                isMoving = false;
+            }
         currentTask = task;
         MoveTo(task.targetPosition);
 
         //Debugger.Instance.Log("Task assigned to Gobbo.");
+        }
     }
 
     public bool HasArrived()
