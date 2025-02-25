@@ -217,6 +217,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inventory: []
+  isBusy: 0
 --- !u!114 &4145317956754321082
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -230,8 +231,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 5
-  currentTask:
-    targetPosition: {x: 0, y: 0}
+  isMoving: 0
   particleSystem: {fileID: 0}
 --- !u!114 &2034391584302237029
 MonoBehaviour:

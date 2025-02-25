@@ -176,7 +176,7 @@ public class TileSelector : MonoBehaviour
                 {
                     Debugger.Instance.Log($"Sending move command to {gobbo.name}");
                     Vector2 targetGridPosition = new Vector2(Mathf.Round(worldPoint.x), Mathf.Round(worldPoint.y));
-                    movement.Interruptpath(targetGridPosition);
+                    movement.InterruptPath(targetGridPosition);
 
                 }
                 else

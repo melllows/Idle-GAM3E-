@@ -5,7 +5,7 @@ using UnityEngine;
 public class Gobblyns : MonoBehaviour
 {  
     public List<string> inventory = new();
-    public bool isBusy { get; private set; }
+    public bool isBusy = false;
     private GobboMovement movement;
     public Queue<Task> taskQueue = new Queue<Task>();
 
@@ -86,33 +86,43 @@ public class Gobblyns : MonoBehaviour
     {
         Debugger.Instance.Log($"[Gobbo {name}] Attempting to queue a hauling task...");
 
-        // Check if StorageManager is available
-        if (StorageManager.Instance == null)
-        {
-            Debug.LogError($"[Gobbo {name}] StorageManager.Instance is null! Cannot queue hauling task.");
-            return;
-        }
-
         StorageBuilding closestStorage = StorageManager.Instance.GetClosestStorage(transform.position);
-        if (closestStorage == null)
-        {
-            Debug.LogWarning($"[Gobbo {name}] No storage found! Cannot queue hauling task.");
-            return;
-        }
 
         Vector3 storagePos = closestStorage.transform.position;
-        Debugger.Instance.Log($"[Gobbo {name}] Found storage at {storagePos}. Queuing hauling task.");
+        Vector2Int storageTile = GridManager.Instance.GetNearestPathTile(storagePos);
+        Vector2Int walkableTile = StorageManager.Instance.FindClosestWalkableTile(storageTile);
+
+        if (!GridManager.Instance.IsWalkable(walkableTile))
+        {
+            Debug.LogError($"❌ [Gobbo {name}] No walkable tile near storage! Task cancelled.");
+            return;
+        }
+
+        Debugger.Instance.Log($"[Gobbo {name}] Found valid dropoff tile {walkableTile}. Queuing hauling task.");
 
         StorageBuilding storageRef = closestStorage;
-
         Task haulingTask = new Task(
-            storagePos,
+            GridManager.Instance.placementTilemap.CellToWorld(new Vector3Int(walkableTile.x, walkableTile.y, 0)),
             5,
             (gobbo) =>
             {
                 if (storageRef != null)
                 {
                     Debugger.Instance.Log($"[Gobbo {name}] Arrived at storage. Depositing items...");
+
+                    foreach (var item in gobbo.inventory)
+                    {
+                        GobboResources resource = GobboResources.GetResource(item);
+                        if (resource != null)
+                        {
+                            StorageManager.Instance.AddResource(resource, 1);
+                        }
+                        else
+                        {
+                            Debug.LogError($"[Gobbo {name}] Resource '{item}' not found in GobboResources.");
+                        }
+                    }
+                    
                     storageRef.DepositItems(gobbo);
                 }
                 else
@@ -120,6 +130,7 @@ public class Gobblyns : MonoBehaviour
                     Debug.LogError($"[Gobbo {name}] Storage reference is null during hauling task!");
                 }
                 gobbo.inventory.Clear();
+                
             }
         );
 

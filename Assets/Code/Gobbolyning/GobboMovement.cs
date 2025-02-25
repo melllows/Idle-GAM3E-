@@ -1,27 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Data.Common;
-using Unity.VisualScripting;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
-using UnityEngine.XR;
 
 public class GobboMovement : MonoBehaviour
 {
     public float speed = 3f;
     private Queue<Vector2> path = new();
-    private bool isMoving = false;
+    public bool isMoving = false;
     public Task currentTask;
-
-    [System.Serializable]
-    public class Task
-    {
-        public Vector2 targetPosition;
-    }
-
-    public float idleDelay;
-    public float idleTimer = 0f;
-
 
     private Animator animator;
     public ParticleSystem particleSystem;
@@ -31,7 +17,6 @@ public class GobboMovement : MonoBehaviour
 
     void Start()
     {
-        idleDelay = Random.Range(15f, 30f);
         animator = GetComponent<Animator>();
         particleSystem = GetComponentInChildren<ParticleSystem>();
 
@@ -42,69 +27,38 @@ public class GobboMovement : MonoBehaviour
         lineRenderer.startColor = Color.cyan;
         lineRenderer.endColor = Color.cyan;
         lineRenderer.positionCount = 0;
-
-        Gobblyns gobbo = GetComponent<Gobblyns>();
     }
 
     void Update()
     {
-        Gobblyns gobbo = GetComponent<Gobblyns>();
-        if (!isMoving && !animator.GetBool("isIntrested") && !animator.GetBool("isWorking"))
+        if (!isMoving && !animator.GetBool("isInterested") && !animator.GetBool("isWorking"))
         {
-            idleTimer += Time.deltaTime;
-            if (idleTimer >= idleDelay && !animator.GetBool("beenIdle"))
-            {
-                animator.SetBool("beenIdle", true);
-                Debugger.Instance.Log("[GobboMovement] " + name + " has been idle for " + idleDelay + " seconds.");
-            }
+            animator.SetBool("beenIdle", true);
         }
         else
         {
-            idleTimer = 0f;
-            if (animator.GetBool("beenIdle"))
-            {
-                animator.SetBool("beenIdle", false);
-                Debugger.Instance.Log("[GobboMovement] " + name + " is no longer idle.");
-            }
+            animator.SetBool("beenIdle", false);
         }
-    }
-
-
-    public void Interruptpath(Vector2 targetPosition)
-    {
-        if(isMoving && currentMovementCoroutine != null)
-        {
-            StopCoroutine(currentMovementCoroutine);
-            currentMovementCoroutine = null;
-            isMoving = false;
-            path.Clear();
-        }
-        MoveTo(targetPosition);
     }
 
     public void MoveTo(Vector2 targetPosition)
     {
-        if (isMoving) {
-            Debugger.Instance.Log("[GobboMovement] " + name + " is already moving. New target: " + targetPosition);
+        if (isMoving)
+        {
+            Debugger.Instance.Log($"[GobboMovement] {name} is already moving. New target: {targetPosition}");
             return;
         }
 
-        //Debugger.Instance.Log($"[GobboMovement] {name} is moving to {targetPosition}");
-
         Vector2Int start = GridManager.Instance.GetNearestPathTile(transform.position);
         Vector2Int target = GridManager.Instance.GetNearestPathTile(targetPosition);
-
-        //Debugger.Instance.Log($"[GobboMovement] Moving from {start} to {target}");
 
         List<Vector2Int> newPath = Pathfinding.FindPath(start, target);
 
         if (newPath.Count == 0)
         {
-            //Debug.LogWarning($"[GobboMovement] No valid path found to {target}! Gobbo cannot move.");
+            Debug.LogWarning($"[GobboMovement] No valid path found to {target}! Gobbo cannot move.");
             return;
         }
-
-        //Debugger.Instance.Log($"[GobboMovement] Path found: {string.Join(" -> ", newPath)}");
 
         path.Clear();
         List<Vector3> worldPositions = new();
@@ -116,16 +70,52 @@ public class GobboMovement : MonoBehaviour
             worldPositions.Add(worldPos);
         }
 
-        Debug.Log("[GobboMovement] " + name + " starting move to " + targetPosition);
-
+        Debugger.Instance.Log($"[GobboMovement] {name} starting move to {targetPosition}");
 
         lineRenderer.positionCount = worldPositions.Count;
         lineRenderer.SetPositions(worldPositions.ToArray());
 
-        animator.SetBool("isIntrested", true);
+        animator.SetBool("isInterested", true);
+
+        if (animator.GetBool("beenIdle"))
+        {
+            StartCoroutine(WaitAndStartPath());
+        }
+        else
+        {
+            animator.SetBool("isInterested", false);
+            StartFollowPath();
+        }
+    }
+
+    private IEnumerator WaitAndStartPath()
+    {
+        yield return new WaitForSeconds(0.5f);
+        animator.SetBool("isInterested", false);
+        StartFollowPath();
+    }
+
+    private void StartFollowPath()
+    {
+        if (currentMovementCoroutine != null)
+        {
+            StopCoroutine(currentMovementCoroutine);
+        }
+
         currentMovementCoroutine = StartCoroutine(FollowPath());
     }
 
+    public void InterruptPath(Vector2 targetPosition)
+    {
+        if (isMoving && currentMovementCoroutine != null)
+        {
+            StopCoroutine(currentMovementCoroutine);
+            currentMovementCoroutine = null;
+            isMoving = false;
+            path.Clear();
+        }
+        MoveTo(targetPosition); // ✅ Restart movement with new target
+    }
 
     private IEnumerator FollowPath()
     {
@@ -133,52 +123,33 @@ public class GobboMovement : MonoBehaviour
         animator.SetBool("isWalking", true);
         particleSystem.Play();
 
-        float rotationSpeed = 1500f;
+        Debugger.Instance.Log($"🚶 [GobboMovement] {name} following path...");
+
+        int loopCounter = 0;
 
         while (path.Count > 0)
         {
+            if (++loopCounter > 500)
+            {
+                Debug.LogError($"❌ [GobboMovement] {name} is stuck! Canceling movement.");
+                isMoving = false;
+                yield break;
+            }
+
             Vector2 nextPos = path.Dequeue();
-            //Debugger.Instance.Log($"Moving to: {nextPos}");
-
-            Quaternion targetRotation;
-
-            if(nextPos.x - transform.position.x < 0)
-            {
-                targetRotation = Quaternion.Euler(0, 180, 0);
-            }
-            else if(nextPos.x - transform.position.x > 0)
-            {
-                targetRotation = Quaternion.Euler(0, 0, 0);
-            }
-            else
-            {
-                targetRotation = transform.rotation;
-            }
+            Debugger.Instance.Log($"➡ [GobboMovement] {name} moving to {nextPos}");
 
             while (Vector2.Distance(transform.position, nextPos) > 0.05f)
             {
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
                 transform.position = Vector2.MoveTowards(transform.position, nextPos, speed * Time.deltaTime);
                 yield return null;
             }
-                //Vector2 direction = (nextPos - (Vector2)transform.position).normalized;
         }
 
-        lineRenderer.positionCount = 0;
+        Debugger.Instance.Log($"✅ [GobboMovement] {name} reached destination.");
         isMoving = false;
         animator.SetBool("isWalking", false);
         particleSystem.Stop();
-
-        //Debugger.Instance.Log("Gobbo has reached destination.");
-
-        yield return new WaitForSeconds(0.2f);
-
-        if (currentTask == null)
-        {
-            StartCoroutine(WorkOnTask(3f));
-        }
-
-        currentMovementCoroutine = null;
     }
 
     public IEnumerator WorkOnTask(float taskTime)
@@ -198,24 +169,22 @@ public class GobboMovement : MonoBehaviour
                 currentMovementCoroutine = null;
                 isMoving = false;
             }
-        currentTask = task;
-        MoveTo(task.targetPosition);
-
-        //Debugger.Instance.Log("Task assigned to Gobbo.");
         }
+        currentTask = task;
+        MoveTo(task.Position);
     }
 
     public bool HasArrived()
     {
         if (currentTask == null) return false;
-        return path.Count == 0 && Vector2.Distance(transform.position, currentTask.targetPosition) < 0.05f;
+        return path.Count == 0 || Vector2.Distance(transform.position, currentTask.Position) < 0.1f;
     }
 
     private void RecalculatePath()
     {
         if (currentTask != null)
         {
-            MoveTo(currentTask.targetPosition);
+            MoveTo(currentTask.Position);
         }
     }
 }

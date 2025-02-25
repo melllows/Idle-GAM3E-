@@ -12,15 +12,7 @@ public class PlacementUI : MonoBehaviour
 
     private void Start()
     {
-        blueprintSystem = FindObjectOfType<BlueprintSystem>();
-        if (blueprintSystem == null)
-        {
-            Debug.LogError("[PlacementUI] BlueprintSystem not found in the scene!");
-        }
-        else
-        {
-            Debug.Log("[PlacementUI] BlueprintSystem found.");
-        }
+        blueprintSystem = FindFirstObjectByType<BlueprintSystem>();
 
         BlueprintData[] loadedBlueprints = Resources.LoadAll<BlueprintData>("Blueprints");
         if (loadedBlueprints == null || loadedBlueprints.Length == 0)
