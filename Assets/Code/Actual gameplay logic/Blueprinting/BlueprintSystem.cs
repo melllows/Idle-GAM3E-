@@ -81,27 +81,22 @@ public class BlueprintSystem : MonoBehaviour
 
     private void PlaceObject(Vector2Int tilePosition)
     {
-        if (currentBlueprintData == null)
-        {
-            Debug.LogError("[BlueprintSystem] currentBlueprintData is null in PlaceObject!");
-            return;
-        }
-        
         Vector3Int cellPosition = new Vector3Int(tilePosition.x, tilePosition.y, 0);
         Vector3 finalPosition = GridManager.Instance.placementTilemap.GetCellCenterWorld(cellPosition);
 
         GameObject placedObject = Instantiate(currentBlueprintData.finalPrefab, finalPosition, Quaternion.identity, GridManager.Instance.placementTilemap.transform);
+
         GridManager.Instance.MarkTileOccupied(tilePosition, placedObject);
 
         if (!currentBlueprintData.isWalkable)
         {
             GridManager.Instance.UpdateWalkability(tilePosition, false);
-            Debugger.Instance.Log("[BlueprintSystem] Placed " + currentBlueprintData.blueprintName + " at " + tilePosition + ". Tile is now unwalkable.");
+            Debugger.Instance.Log($"🚧 Placed {currentBlueprintData.blueprintName} at {tilePosition}. Tile is now unwalkable.");
         }
         else
         {
             GridManager.Instance.UpdateWalkability(tilePosition, true);
-            Debugger.Instance.Log("[BlueprintSystem] Placed " + currentBlueprintData.blueprintName + " at " + tilePosition + ". Tile remains walkable.");
+            Debugger.Instance.Log($"✅ Placed {currentBlueprintData.blueprintName} at {tilePosition}. Tile remains walkable.");
         }
 
         CancelPlacement();

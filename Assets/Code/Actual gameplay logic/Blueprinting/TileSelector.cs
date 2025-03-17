@@ -20,16 +20,11 @@ public class TileSelector : MonoBehaviour
     void Update()
     {
         HandleSelectionInputs(); 
-        HandleGobboMovement();
+        //HandleGobboMovement();
     }
 
     void HandleSelectionInputs()
     {
-        if (selectionBox == null)
-        {
-            Debug.LogError("❌ selectionBox is missing in TileSelector!");
-            return;
-        }
         if (Input.GetMouseButtonDown(0))
         {
             startMousePosition = Input.mousePosition;
@@ -108,8 +103,6 @@ public class TileSelector : MonoBehaviour
     void SelectSingleTile(Vector3 worldPosition)
     {
         Debugger.Instance.Log($"Single Tile Clicked at: {worldPosition}");
-
-        // ✅ Deselect all Gobbos when clicking on an empty tile
         SelectionManager.instance.DeselectAll();
     }
 
@@ -150,44 +143,6 @@ public class TileSelector : MonoBehaviour
 
         return new Rect(min, max - min);
     }
-
-    void HandleGobboMovement()
-    {
-        if (Input.GetMouseButtonDown(1))
-        {
-            Debugger.Instance.Log("Right-click detected!");
-
-            if (SelectionManager.instance.selectedGobbos.Count == 0)
-            {
-                Debug.LogWarning("No Gobbos selected. Right-click ignored.");
-                return;
-            }
-
-            Vector3 worldPoint = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            worldPoint.z = 0; // Keep Gobbos in 2D space
-
-            Debugger.Instance.Log($"Right-clicked at: {worldPoint} | Selected Gobbos: {SelectionManager.instance.selectedGobbos.Count}");
-
-            foreach (SelectableGobbos gobbo in SelectionManager.instance.selectedGobbos)
-            {
-                GobboMovement movement = gobbo.GetComponent<GobboMovement>();
-
-                if (movement != null)
-                {
-                    Debugger.Instance.Log($"Sending move command to {gobbo.name}");
-                    Vector2 targetGridPosition = new Vector2(Mathf.Round(worldPoint.x), Mathf.Round(worldPoint.y));
-                    movement.InterruptPath(targetGridPosition);
-
-                }
-                else
-                {
-                    Debug.LogError($"Gobbo {gobbo.name} is missing GobboMovement component!");
-                }
-            }
-        }
-    }
-
-
 
     Bounds GetSelectionBounds()
     {

@@ -1,19 +1,17 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
+using System.Collections.Generic;
+using AStar;
 
 public class GobboMovement : MonoBehaviour
 {
     public float speed = 3f;
     private Queue<Vector2> path = new();
-    public bool isMoving = false;
-    public Task currentTask;
+    private bool isMoving = false;
 
     private Animator animator;
     public ParticleSystem particleSystem;
     private LineRenderer lineRenderer;
-
-    private Coroutine currentMovementCoroutine;
 
     void Start()
     {
@@ -29,115 +27,76 @@ public class GobboMovement : MonoBehaviour
         lineRenderer.positionCount = 0;
     }
 
-    void Update()
+    public IEnumerator WorkOnTask(float taskTime)
     {
-        if (!isMoving && !animator.GetBool("isInterested") && !animator.GetBool("isWorking"))
-        {
-            animator.SetBool("beenIdle", true);
-        }
-        else
-        {
-            animator.SetBool("beenIdle", false);
-        }
+        Debugger.Instance.Log($"[GobboMovement] Performing task for {taskTime} seconds.");
+        animator.SetBool("isWorking", true);
+        yield return new WaitForSeconds(taskTime);
+        animator.SetBool("isWorking", false);
+        Debugger.Instance.Log("[GobboMovement] Task completed.");
     }
 
     public void MoveTo(Vector2 targetPosition)
     {
-        if (isMoving)
-        {
-            Debugger.Instance.Log($"[GobboMovement] {name} is already moving. New target: {targetPosition}");
-            return;
-        }
+        Debugger.Instance.Log($"[GobboMovement] Calculating path to {targetPosition}");
 
         Vector2Int start = GridManager.Instance.GetNearestPathTile(transform.position);
         Vector2Int target = GridManager.Instance.GetNearestPathTile(targetPosition);
 
-        List<Vector2Int> newPath = Pathfinding.FindPath(start, target);
+        // Get walkable map dimensions
+        bool[,] walkableMap = GridManager.Instance.GetWalkableMap();
+        int width = walkableMap.GetLength(1);
+        int height = walkableMap.GetLength(0);
 
-        if (newPath.Count == 0)
+        // Prevent out-of-bounds errors
+        if (start.x < 0 || start.y < 0 || target.x < 0 || target.y < 0 ||
+            start.x >= width || start.y >= height || target.x >= width || target.y >= height)
         {
-            Debug.LogWarning($"[GobboMovement] No valid path found to {target}! Gobbo cannot move.");
+            Debugger.Instance.Log($"[GobboMovement] Invalid path request! Start: {start}, Target: {target}, Map Size: {width}x{height}");
             return;
         }
+
+        // Generate the path using A* (Synchronous method)
+        (int, int)[] newPath = AStarPathfinding.GeneratePathSync(start.x, start.y, target.x, target.y, walkableMap, true, false);
+
+        if (newPath.Length == 0)
+        {
+            Debugger.Instance.Log($"[GobboMovement] No valid path found to {target}! Gobbo cannot move.");
+            return;
+        }
+
+        Debugger.Instance.Log($"[GobboMovement] Path found: {string.Join(" -> ", newPath)}");
 
         path.Clear();
         List<Vector3> worldPositions = new();
 
-        foreach (Vector2Int gridPos in newPath)
+        foreach ((int x, int y) in newPath)
         {
-            Vector2 worldPos = GridManager.Instance.pathfindingTilemap.CellToWorld(new Vector3Int(gridPos.x, gridPos.y, 0));
+            Vector2 worldPos = GridManager.Instance.pathfindingTilemap.CellToWorld(new Vector3Int(x, y, 0));
             path.Enqueue(worldPos);
             worldPositions.Add(worldPos);
         }
 
-        Debugger.Instance.Log($"[GobboMovement] {name} starting move to {targetPosition}");
-
         lineRenderer.positionCount = worldPositions.Count;
         lineRenderer.SetPositions(worldPositions.ToArray());
 
-        animator.SetBool("isInterested", true);
+        animator.SetBool("isIntrested", true);
 
-        if (animator.GetBool("beenIdle"))
-        {
-            StartCoroutine(WaitAndStartPath());
-        }
-        else
-        {
-            animator.SetBool("isInterested", false);
-            StartFollowPath();
-        }
+        if (!isMoving) StartCoroutine(FollowPath());
     }
 
-    private IEnumerator WaitAndStartPath()
-    {
-        yield return new WaitForSeconds(0.5f);
-        animator.SetBool("isInterested", false);
-        StartFollowPath();
-    }
-
-    private void StartFollowPath()
-    {
-        if (currentMovementCoroutine != null)
-        {
-            StopCoroutine(currentMovementCoroutine);
-        }
-
-        currentMovementCoroutine = StartCoroutine(FollowPath());
-    }
-
-    public void InterruptPath(Vector2 targetPosition)
-    {
-        if (isMoving && currentMovementCoroutine != null)
-        {
-            StopCoroutine(currentMovementCoroutine);
-            currentMovementCoroutine = null;
-            isMoving = false;
-            path.Clear();
-        }
-        MoveTo(targetPosition); // ✅ Restart movement with new target
-    }
 
     private IEnumerator FollowPath()
     {
+        Debugger.Instance.Log("[GobboMovement] Following path.");
         isMoving = true;
         animator.SetBool("isWalking", true);
         particleSystem.Play();
 
-        Debugger.Instance.Log($"🚶 [GobboMovement] {name} following path...");
-
-        int loopCounter = 0;
-
         while (path.Count > 0)
         {
-            if (++loopCounter > 500)
-            {
-                Debug.LogError($"❌ [GobboMovement] {name} is stuck! Canceling movement.");
-                isMoving = false;
-                yield break;
-            }
-
             Vector2 nextPos = path.Dequeue();
-            Debugger.Instance.Log($"➡ [GobboMovement] {name} moving to {nextPos}");
+            Debugger.Instance.Log($"[GobboMovement] Moving to: {nextPos}");
 
             while (Vector2.Distance(transform.position, nextPos) > 0.05f)
             {
@@ -146,45 +105,24 @@ public class GobboMovement : MonoBehaviour
             }
         }
 
-        Debugger.Instance.Log($"✅ [GobboMovement] {name} reached destination.");
+        lineRenderer.positionCount = 0;
         isMoving = false;
         animator.SetBool("isWalking", false);
         particleSystem.Stop();
+
+        Debugger.Instance.Log("[GobboMovement] Gobbo has reached destination.");
     }
 
-    public IEnumerator WorkOnTask(float taskTime)
+    public void InterruptPath(Vector2 targetPosition)
     {
-        animator.SetBool("isWorking", true);
-        yield return new WaitForSeconds(taskTime);
-        animator.SetBool("isWorking", false);
-    }
-
-    public void AssignTask(Task task)
-    {
-        if (currentTask != null && isMoving)
-        {
-            if (currentMovementCoroutine != null)
-            {
-                StopCoroutine(currentMovementCoroutine);
-                currentMovementCoroutine = null;
-                isMoving = false;
-            }
-        }
-        currentTask = task;
-        MoveTo(task.Position);
+        Debugger.Instance.Log($"[GobboMovement] Interrupting current path. New target: {targetPosition}");
+        StopAllCoroutines();
+        path.Clear();
+        MoveTo(targetPosition);
     }
 
     public bool HasArrived()
     {
-        if (currentTask == null) return false;
-        return path.Count == 0 || Vector2.Distance(transform.position, currentTask.Position) < 0.1f;
-    }
-
-    private void RecalculatePath()
-    {
-        if (currentTask != null)
-        {
-            MoveTo(currentTask.Position);
-        }
+        return path.Count == 0;
     }
 }

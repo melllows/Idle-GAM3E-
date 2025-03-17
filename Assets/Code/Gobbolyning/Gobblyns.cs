@@ -7,11 +7,19 @@ public class Gobblyns : MonoBehaviour
     public List<string> inventory = new();
     public bool isBusy = false;
     private GobboMovement movement;
-    public Queue<Task> taskQueue = new Queue<Task>();
+    public Queue<GameTask> taskQueue = new Queue<GameTask>(); // Fixed name
+
+    private Gobbomation gobbomation;
+
+    void Awake()
+    {
+        gobbomation = GetComponent<Gobbomation>();
+    }
 
     void Start()
     {
         GobboManager.Instance.RegisterGobbo(this);
+        Gobborandomizer.Instance.Randomize(gobbomation);
         movement = GetComponent<GobboMovement>();
     }
 
@@ -21,7 +29,8 @@ public class Gobblyns : MonoBehaviour
         TaskManager.Instance.AssignUnclaimedTasks();
     }
 
-    public void AssignTask(Task task) {
+    public void AssignTask(GameTask task) // Fixed name
+    {
         if (isBusy) {
             Debugger.Instance.Log("[Gobbo " + name + "] Already busy. Queueing task.");
             taskQueue.Enqueue(task);
@@ -32,18 +41,16 @@ public class Gobblyns : MonoBehaviour
         }
     }
 
-    private IEnumerator ExecuteTask(Task task)
+    private IEnumerator ExecuteTask(GameTask task) // Fixed name
     {
         Debugger.Instance.Log($"[Gobbo {name}] Moving towards task at position {task.Position}...");
         movement.MoveTo(task.Position);
 
-        yield return new WaitUntil(() =>
-            movement.HasArrived() || 
-            Vector2.Distance(transform.position, task.Position) < 0.5f);
+        yield return new WaitUntil(() => movement.HasArrived());
 
         Debugger.Instance.Log($"[Gobbo {name}] Arrived at task location.");
 
-        if(task.targetCrop != null)
+        if (task.targetCrop != null)
         {
             Debugger.Instance.Log($"[Gobbo {name}] Task is a harvest task. Beginning harvest work...");
             yield return movement.WorkOnTask(task.TaskTime);
@@ -69,7 +76,6 @@ public class Gobblyns : MonoBehaviour
             TaskManager.Instance.AssignUnclaimedTasks();
         }
     }
-
 
     public void AddToInventory(string item)
     {
@@ -101,7 +107,7 @@ public class Gobblyns : MonoBehaviour
         Debugger.Instance.Log($"[Gobbo {name}] Found valid dropoff tile {walkableTile}. Queuing hauling task.");
 
         StorageBuilding storageRef = closestStorage;
-        Task haulingTask = new Task(
+        GameTask haulingTask = new GameTask( // Fixed name
             GridManager.Instance.placementTilemap.CellToWorld(new Vector3Int(walkableTile.x, walkableTile.y, 0)),
             5,
             (gobbo) =>
@@ -130,7 +136,6 @@ public class Gobblyns : MonoBehaviour
                     Debug.LogError($"[Gobbo {name}] Storage reference is null during hauling task!");
                 }
                 gobbo.inventory.Clear();
-                
             }
         );
 

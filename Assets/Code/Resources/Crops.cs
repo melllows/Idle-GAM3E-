@@ -55,16 +55,16 @@ public class Crops : MonoBehaviour
     {
         Debugger.Instance.Log("[Crops] Registering a new harvest task at " + transform.position);
 
-        Task harvestTask = new Task(
+        GameTask harvestTask = new GameTask( // Changed Tasks → GameTask
             transform.position,
             5,
             (gobbo) =>
             {
                 Debugger.Instance.Log("[Crops] " + gobbo.name + " harvested crop at " + transform.position);
                 gobbo.AddToInventory("Wheat");
-                }
+            }
         );
-        
+
         harvestTask.targetCrop = this;
 
         if (TaskManager.Instance == null)
@@ -76,6 +76,7 @@ public class Crops : MonoBehaviour
             TaskManager.Instance.RegisterTask(harvestTask);
         }
     }
+
 
     public void Harvest(Gobblyns gobbo)
     {

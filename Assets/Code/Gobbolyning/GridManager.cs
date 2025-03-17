@@ -33,6 +33,36 @@ public class GridManager : MonoBehaviour
             occupiedTiles.Remove(position);
     }
 
+    public bool[,] GetWalkableMap()
+    {
+        if (pathfindingTilemap == null)
+        {
+            Debug.LogError("[GridManager] pathfindingTilemap is null! Cannot generate walkable map.");
+            return new bool[1, 1]; // Return a minimal valid map to prevent crashes
+        }
+
+        int width = pathfindingTilemap.cellBounds.size.x;
+        int height = pathfindingTilemap.cellBounds.size.y;
+
+        if (width <= 0 || height <= 0)
+        {
+            Debug.LogError($"[GridManager] Invalid grid size! Width: {width}, Height: {height}");
+            return new bool[1, 1];
+        }
+
+        bool[,] walkableMap = new bool[height, width];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                Vector3Int cellPosition = new Vector3Int(x, y, 0);
+                walkableMap[y, x] = pathfindingTilemap.HasTile(cellPosition);
+            }
+        }
+
+        return walkableMap;
+    }
 
     void GenerateGrid()
     {
